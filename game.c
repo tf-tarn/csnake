@@ -1,4 +1,13 @@
+#include <stdlib.h>
+
 #include "game.h"
+
+typedef struct snake {
+    int x;
+    int y;
+    struct snake *prev;
+    struct snake *next;
+} snake_t;
 
 bool Game_start(SDL_Renderer *renderer, int w, int h)
 {
@@ -43,11 +52,20 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
     // Initialize start time (in ms)
     long long last = Utils_time();
 
-    // Falling brick coordinates
-    int fallingBrickX = grid.xCells / 2;
-    int fallingBrickY = -1;
-    int fallingBrickSpeed = 4;
+    // Snake coordinates
+    snake_t *snake = malloc(sizeof(snake_t));
+    snake->x = grid.xCells / 2;
+    snake->y = grid.yCells / 2;
+    snake->next = NULL;
+    snake_t *tail = snake;
 
+    int snakeX = grid.xCells / 2;
+    int snakeY = -1;
+    int snakeSpeed = 1;
+    int snake_direction = 0;
+    int snake_next_direction = 0;
+    int snake_length = 5;
+    int grow_count = 0;
 
     // Event loop exit flag
     bool quit = false;
@@ -75,26 +93,23 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
                     break;
 
                 case SDLK_RIGHT:
-                    if(fallingBrickY != -1 && fallingBrickX < grid.xCells - 1)
-                    {
-                        // Un-color last position
-                        grid.cells[fallingBrickX][fallingBrickY].rectColor = grid.backgroundColor;
-
-                        // Color new position
-                        fallingBrickX++;
-                        grid.cells[fallingBrickX][fallingBrickY].rectColor = COLOR_RED;
+                    if (snake_direction & 1) {
+                        snake_next_direction = 0;
                     }
                     break;
-
+                case SDLK_DOWN:
+                    if (!(snake_direction & 1)) {
+                        snake_next_direction = 3;
+                    }
+                    break;
+                case SDLK_UP:
+                    if (!(snake_direction & 1)) {
+                        snake_next_direction = 1;
+                    }
+                    break;
                 case SDLK_LEFT:
-                    if(fallingBrickY != -1 && fallingBrickX > 0)
-                    {
-                        // Un-color last position
-                        grid.cells[fallingBrickX][fallingBrickY].rectColor = grid.backgroundColor;
-
-                        // Color new position
-                        fallingBrickX--;
-                        grid.cells[fallingBrickX][fallingBrickY].rectColor = COLOR_RED;
+                    if (snake_direction & 1) {
+                        snake_next_direction = 2;
                     }
                     break;
                 }
@@ -102,27 +117,67 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
         }
 
         // Move the falling brick
-        if(Utils_time() - last >= 1000 / fallingBrickSpeed)
+        if(Utils_time() - last >= 1000 / snakeSpeed)
         {
-            if(fallingBrickY >= 0)
-            {
-                // Un-color the falling brick last position
-                grid.cells[fallingBrickX][fallingBrickY].rectColor = grid.backgroundColor;
+
+            ++grow_count;
+
+            if (grow_count > 4) {
+                grow_count = 0;
+                ++snake_length;
             }
 
-            if(fallingBrickY < grid.yCells - 1)
-            {
-                // Go to next position
-                fallingBrickY++;
+            snake_direction = snake_next_direction;
 
-                // Color the falling brick new position
-                grid.cells[fallingBrickX][fallingBrickY].rectColor = COLOR_RED;
+            // Un-color the snake last position
+            /* grid.cells[snakeX][snakeY].rectColor = grid.backgroundColor; */
+
+            switch (snake_direction) {
+            case 0:
+                ++snakeX;
+                break;
+            case 3:
+                ++snakeY;
+                break;
+            case 2:
+                --snakeX;
+                break;
+            case 1:
+                --snakeY;
+                break;
+            default:
+                snake_direction = 0;
+                ++snakeX;
+                break;
             }
-            else
-            {
-                // Reset position
-                fallingBrickY = -1;
+
+            snakeY = (snakeY + grid.yCells) % grid.yCells;
+            snakeX = (snakeX + grid.xCells) % grid.xCells;
+
+            snake_t *new_head = malloc(sizeof(snake_t));
+            new_head->next = snake;
+            snake->prev = new_head;
+            new_head->x = snakeX;
+            new_head->y = snakeY;
+            snake = new_head;
+
+            if (grow_count) {
+                // didn't grow
+                grid.cells[tail->x][tail->y].rectColor = grid.backgroundColor;
+
+                snake_t *new_tail = tail->prev;
+                free(tail);
+                tail = new_tail;
+            } else {
+                // grew
+                ++snake_length;
             }
+
+            printf("snake %p\t\ttail %p\n", snake, tail);
+
+
+            // Color the snake new position
+            grid.cells[snakeX][snakeY].rectColor = COLOR_RED;
 
             last = Utils_time();
         }

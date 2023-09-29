@@ -1,6 +1,5 @@
 # cmake_minimum_required (VERSION 2.6)
 # project (Snake)
-# set(CMAKE_BUILD_TYPE Debug)
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -g -Wall -Werror=return-type")
 # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -Wall -Werror=return-type -Werror=switch")
 
@@ -12,6 +11,7 @@
 
 
 project(basic-c-sdl-game)
+set(CMAKE_BUILD_TYPE Debug)
 cmake_minimum_required(VERSION 3.5.1)
 add_executable(snake
   main.c
