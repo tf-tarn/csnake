@@ -3,17 +3,80 @@
 
 #include "game.h"
 
-typedef struct snake {
+typedef struct snake_body {
     int x;
     int y;
-    struct snake *prev;
+    struct snake_body *prev;
+} snake_body_t;
+
+typedef enum {
+    DIR_RIGHT,
+    DIR_UP,
+    DIR_LEFT,
+    DIR_DOWN
+} SnakeDirection;
+
+typedef struct snake_state {
+    int x;
+    int y;
+    int speed;
+    int direction;
 } snake_t;
 
-bool is_food(Cell *cell) {
+bool dir_is_horiz(SnakeDirection direction) {
+    return direction == DIR_LEFT || direction == DIR_RIGHT;
+}
+
+void snake_set_direction(snake_t *snake, SnakeDirection direction) {
+    bool allowed =
+        (dir_is_horiz(direction) && !dir_is_horiz(snake->direction))
+        || (!dir_is_horiz(direction) && dir_is_horiz(snake->direction));
+    if (allowed) {
+        snake->direction = direction;
+    }
+}
+
+void snake_advance(snake_t *snake) {
+    switch (snake->direction) {
+    case DIR_RIGHT:
+        ++snake->x;
+        break;
+    case DIR_DOWN:
+        ++snake->y;
+        break;
+    case DIR_LEFT:
+        --snake->x;
+        break;
+    case DIR_UP:
+        --snake->y;
+        break;
+    default:
+        snake->direction = DIR_RIGHT;
+        ++snake->x;
+        break;
+    }
+}
+
+void snake_wrap_position(snake_t *snake, int x_max, int y_max) {
+    while (snake->x > x_max) {
+        snake->x -= x_max;
+    }
+    while (snake->x < 0) {
+        snake->x += x_max;
+    }
+    while (snake->y > y_max) {
+        snake->y -= y_max;
+    }
+    while (snake->y < 0) {
+        snake->y += y_max;
+    }
+}
+
+bool cell_is_food(Cell *cell) {
     return !memcmp(&cell->rectColor, &COLOR_GREEN, sizeof(SDL_Color));
 }
 
-bool is_snake(Cell *cell) {
+bool cell_is_snake(Cell *cell) {
     return !memcmp(&cell->rectColor, &COLOR_RED, sizeof(SDL_Color));
 }
 
@@ -22,7 +85,7 @@ void place_snake_food(Grid *grid) {
     int y = grid->yCells * (((float)rand()) / RAND_MAX);
 
     // Naively search for a non-snake cell.
-    while (is_snake(&grid->cells[x][y])) {
+    while (cell_is_snake(&grid->cells[x][y])) {
         x = grid->xCells * (((float)rand()) / RAND_MAX);
         y = grid->yCells * (((float)rand()) / RAND_MAX);
     }
@@ -30,23 +93,16 @@ void place_snake_food(Grid *grid) {
     grid->cells[x][y].rectColor = COLOR_GREEN;
 }
 
-enum SnakeDirection {
-    DIR_RIGHT,
-    DIR_UP,
-    DIR_LEFT,
-    DIR_DOWN
-};
-
-snake_t *move_head(snake_t *head, int x, int y) {
-    snake_t *new_head = malloc(sizeof(snake_t));
+snake_body_t *move_head(snake_body_t *head, int x, int y) {
+    snake_body_t *new_head = malloc(sizeof(snake_body_t));
     head->prev = new_head;
     new_head->x = x;
     new_head->y = y;
     return new_head;
 }
 
-snake_t *move_tail(snake_t *tail) {
-    snake_t *new_tail = tail->prev;
+snake_body_t *move_tail(snake_body_t *tail) {
+    snake_body_t *new_tail = tail->prev;
     free(tail);
     return new_tail;
 }
@@ -96,22 +152,24 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
     // Initialize start time (in ms)
     long long last = Utils_time();
 
-    // Snake coordinates
-    int snake_x = grid.xCells / 2;
-    int snake_y = grid.yCells / 2;
-    int snake_speed = 2;
-    int snake_direction = DIR_RIGHT;
-    int snake_next_direction = snake_direction;
+    // Snake state
+    snake_t snake;
+    snake.x = grid.xCells / 2;
+    snake.y = grid.yCells / 2;
+    snake.speed = 2;
+    snake.direction = DIR_RIGHT;
 
-    snake_t *snake = malloc(sizeof(snake_t));
-    snake->x = snake_x;
-    snake->y = snake_y;
-    snake_t *tail = snake;
+    snake_body_t *head = malloc(sizeof(snake_body_t));
+    head->x = snake.x;
+    head->y = snake.y;
+    snake_body_t *tail = head;
 
     place_snake_food(&grid);
 
     // Event loop exit flag
     bool quit = false;
+
+    SnakeDirection new_direction = snake.direction;
 
     // Event loop
     while(!quit)
@@ -121,6 +179,7 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
         // Get available event
         while(SDL_PollEvent(&e))
         {
+
             // User requests quit
             if(e.type == SDL_QUIT)
             {
@@ -136,62 +195,36 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
                     break;
 
                 case SDLK_RIGHT:
-                    if (snake_direction == DIR_UP || snake_direction == DIR_DOWN) {
-                        snake_next_direction = 0;
-                    }
+                    new_direction = DIR_RIGHT;
                     break;
                 case SDLK_DOWN:
-                    if (snake_direction == DIR_LEFT ||snake_direction == DIR_RIGHT) {
-                        snake_next_direction = 3;
-                    }
+                    new_direction = DIR_DOWN;
                     break;
                 case SDLK_UP:
-                    if (snake_direction == DIR_LEFT ||snake_direction == DIR_RIGHT) {
-                        snake_next_direction = 1;
-                    }
+                    new_direction = DIR_UP;
                     break;
                 case SDLK_LEFT:
-                    if (snake_direction == DIR_UP ||snake_direction == DIR_DOWN) {
-                        snake_next_direction = 2;
-                    }
+                    new_direction = DIR_LEFT;
                     break;
                 }
             }
         }
 
-        // Move the falling brick
-        if(Utils_time() - last >= 1000 / snake_speed)
+        // Move the snake
+        if (Utils_time() - last >= 1000 / snake.speed)
         {
-            snake_direction = snake_next_direction;
+            snake_set_direction(&snake, new_direction);
 
-            switch (snake_direction) {
-            case 0:
-                ++snake_x;
-                break;
-            case 3:
-                ++snake_y;
-                break;
-            case 2:
-                --snake_x;
-                break;
-            case 1:
-                --snake_y;
-                break;
-            default:
-                snake_direction = 0;
-                ++snake_x;
-                break;
-            }
+            snake_advance(&snake);
 
-            snake_y = (snake_y + grid.yCells) % grid.yCells;
-            snake_x = (snake_x + grid.xCells) % grid.xCells;
+            snake_wrap_position(&snake, grid.xCells, grid.yCells);
 
-            snake = move_head(snake, snake_x, snake_y);
+            head = move_head(head, snake.x, snake.y);
 
-            if (is_food(&grid.cells[snake_x][snake_y])) {
+            if (cell_is_food(&grid.cells[snake.x][snake.y])) {
                 // grew; tail stays where it is; make new food appear
                 place_snake_food(&grid);
-            } else if (is_snake(&grid.cells[snake_x][snake_y])) {
+            } else if (cell_is_snake(&grid.cells[snake.x][snake.y])) {
                 // snake tried to eat itself
                 printf("Snake is not allowed to eat itself.\n");
                 return false;
@@ -201,10 +234,8 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
                 tail = move_tail(tail);
             }
 
-            printf("snake %p\t\ttail %p\n", snake, tail);
-
             // Color the snake new position
-            grid.cells[snake_x][snake_y].rectColor = COLOR_RED;
+            grid.cells[snake.x][snake.y].rectColor = COLOR_RED;
 
             last = Utils_time();
         }
@@ -217,7 +248,7 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
 
         // Show message
         stringRGBA(renderer, grid.rect.x + grid.xCells, grid.rect.y - 20,
-                   "This is a falling brick < Press RIGTH and LEFT to move >",
+                   "Move the snake with UP, DOWN, LEFT, and RIGHT. Eat food. Don't eat snake.",
                    COLOR_LIGHT_GRAY.r, COLOR_LIGHT_GRAY.g, COLOR_LIGHT_GRAY.b, COLOR_LIGHT_GRAY.a);
 
         // Update screen
