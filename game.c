@@ -10,18 +10,33 @@ typedef struct snake {
     struct snake *next;
 } snake_t;
 
+bool is_food(Cell *cell) {
+    return !memcmp(&cell->rectColor, &COLOR_GREEN, sizeof(SDL_Color));
+}
+
+bool is_snake(Cell *cell) {
+    return !memcmp(&cell->rectColor, &COLOR_RED, sizeof(SDL_Color));
+}
+
 void place_snake_food(Grid *grid) {
     int x = grid->xCells * (((float)rand()) / RAND_MAX);
     int y = grid->yCells * (((float)rand()) / RAND_MAX);
 
     // Naively search for a non-snake cell.
-    while (!memcmp(&grid->cells[x][y].rectColor, &COLOR_RED, sizeof(SDL_Color))) {
-        x = (grid->xCells * rand()) / RAND_MAX;
-        y = (grid->yCells * rand()) / RAND_MAX;
+    while (is_snake(&grid->cells[x][y])) {
+        x = grid->xCells * (((float)rand()) / RAND_MAX);
+        y = grid->yCells * (((float)rand()) / RAND_MAX);
     }
 
     grid->cells[x][y].rectColor = COLOR_GREEN;
 }
+
+enum SnakeDirection {
+    DIR_RIGHT,
+    DIR_UP,
+    DIR_LEFT,
+    DIR_DOWN
+};
 
 bool Game_start(SDL_Renderer *renderer, int w, int h)
 {
@@ -72,8 +87,8 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
     int snakeX = grid.xCells / 2;
     int snakeY = grid.yCells / 2;
     int snakeSpeed = 2;
-    int snake_direction = 0;
-    int snake_next_direction = 0;
+    int snake_direction = DIR_RIGHT;
+    int snake_next_direction = snake_direction;
 
     snake_t *snake = malloc(sizeof(snake_t));
     snake->x = snakeX;
@@ -109,22 +124,22 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
                     break;
 
                 case SDLK_RIGHT:
-                    if (snake_direction & 1) {
+                    if (snake_direction == DIR_UP || snake_direction == DIR_DOWN) {
                         snake_next_direction = 0;
                     }
                     break;
                 case SDLK_DOWN:
-                    if (!(snake_direction & 1)) {
+                    if (snake_direction == DIR_LEFT ||snake_direction == DIR_RIGHT) {
                         snake_next_direction = 3;
                     }
                     break;
                 case SDLK_UP:
-                    if (!(snake_direction & 1)) {
+                    if (snake_direction == DIR_LEFT ||snake_direction == DIR_RIGHT) {
                         snake_next_direction = 1;
                     }
                     break;
                 case SDLK_LEFT:
-                    if (snake_direction & 1) {
+                    if (snake_direction == DIR_UP ||snake_direction == DIR_DOWN) {
                         snake_next_direction = 2;
                     }
                     break;
@@ -170,9 +185,13 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
             snake = new_head;
 
 
-            if (!memcmp(&grid.cells[snakeX][snakeY].rectColor, &COLOR_GREEN, sizeof(SDL_Color))) {
+            if (is_food(&grid.cells[snakeX][snakeY])) {
                 // grew; tail stays where it is; make new food appear
                 place_snake_food(&grid);
+            } else if (is_snake(&grid.cells[snakeX][snakeY])) {
+                // snake tried to eat itself
+                printf("Snake is not allowed to eat itself.\n");
+                return false;
             } else {
                 // didn't grow; move the tail along
                 grid.cells[tail->x][tail->y].rectColor = grid.backgroundColor;
