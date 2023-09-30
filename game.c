@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <time.h>
 
 #include "game.h"
 
@@ -9,8 +10,23 @@ typedef struct snake {
     struct snake *next;
 } snake_t;
 
+void place_snake_food(Grid *grid) {
+    int x = grid->xCells * (((float)rand()) / RAND_MAX);
+    int y = grid->yCells * (((float)rand()) / RAND_MAX);
+
+    // Naively search for a non-snake cell.
+    while (!memcmp(&grid->cells[x][y].rectColor, &COLOR_RED, sizeof(SDL_Color))) {
+        x = (grid->xCells * rand()) / RAND_MAX;
+        y = (grid->yCells * rand()) / RAND_MAX;
+    }
+
+    grid->cells[x][y].rectColor = COLOR_GREEN;
+}
+
 bool Game_start(SDL_Renderer *renderer, int w, int h)
 {
+    srand(time(0));
+
     // Init grid
     Grid grid = {0};
 
@@ -53,19 +69,19 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
     long long last = Utils_time();
 
     // Snake coordinates
+    int snakeX = grid.xCells / 2;
+    int snakeY = grid.yCells / 2;
+    int snakeSpeed = 2;
+    int snake_direction = 0;
+    int snake_next_direction = 0;
+
     snake_t *snake = malloc(sizeof(snake_t));
-    snake->x = grid.xCells / 2;
-    snake->y = grid.yCells / 2;
+    snake->x = snakeX;
+    snake->y = snakeY;
     snake->next = NULL;
     snake_t *tail = snake;
 
-    int snakeX = grid.xCells / 2;
-    int snakeY = -1;
-    int snakeSpeed = 1;
-    int snake_direction = 0;
-    int snake_next_direction = 0;
-    int snake_length = 5;
-    int grow_count = 0;
+    place_snake_food(&grid);
 
     // Event loop exit flag
     bool quit = false;
@@ -119,14 +135,6 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
         // Move the falling brick
         if(Utils_time() - last >= 1000 / snakeSpeed)
         {
-
-            ++grow_count;
-
-            if (grow_count > 4) {
-                grow_count = 0;
-                ++snake_length;
-            }
-
             snake_direction = snake_next_direction;
 
             // Un-color the snake last position
@@ -161,20 +169,19 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
             new_head->y = snakeY;
             snake = new_head;
 
-            if (grow_count) {
-                // didn't grow
-                grid.cells[tail->x][tail->y].rectColor = grid.backgroundColor;
 
+            if (!memcmp(&grid.cells[snakeX][snakeY].rectColor, &COLOR_GREEN, sizeof(SDL_Color))) {
+                // grew; tail stays where it is; make new food appear
+                place_snake_food(&grid);
+            } else {
+                // didn't grow; move the tail along
+                grid.cells[tail->x][tail->y].rectColor = grid.backgroundColor;
                 snake_t *new_tail = tail->prev;
                 free(tail);
                 tail = new_tail;
-            } else {
-                // grew
-                ++snake_length;
             }
 
             printf("snake %p\t\ttail %p\n", snake, tail);
-
 
             // Color the snake new position
             grid.cells[snakeX][snakeY].rectColor = COLOR_RED;
