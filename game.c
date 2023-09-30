@@ -38,6 +38,21 @@ enum SnakeDirection {
     DIR_DOWN
 };
 
+snake_t *move_head(snake_t *head, int x, int y) {
+    snake_t *new_head = malloc(sizeof(snake_t));
+    new_head->next = head;
+    head->prev = new_head;
+    new_head->x = x;
+    new_head->y = y;
+    return new_head;
+}
+
+snake_t *move_tail(snake_t *tail) {
+    snake_t *new_tail = tail->prev;
+    free(tail);
+    return new_tail;
+}
+
 bool Game_start(SDL_Renderer *renderer, int w, int h)
 {
     srand(time(0));
@@ -152,9 +167,6 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
         {
             snake_direction = snake_next_direction;
 
-            // Un-color the snake last position
-            /* grid.cells[snakeX][snakeY].rectColor = grid.backgroundColor; */
-
             switch (snake_direction) {
             case 0:
                 ++snakeX;
@@ -177,13 +189,7 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
             snakeY = (snakeY + grid.yCells) % grid.yCells;
             snakeX = (snakeX + grid.xCells) % grid.xCells;
 
-            snake_t *new_head = malloc(sizeof(snake_t));
-            new_head->next = snake;
-            snake->prev = new_head;
-            new_head->x = snakeX;
-            new_head->y = snakeY;
-            snake = new_head;
-
+            snake = move_head(snake, snakeX, snakeY);
 
             if (is_food(&grid.cells[snakeX][snakeY])) {
                 // grew; tail stays where it is; make new food appear
@@ -195,9 +201,7 @@ bool Game_start(SDL_Renderer *renderer, int w, int h)
             } else {
                 // didn't grow; move the tail along
                 grid.cells[tail->x][tail->y].rectColor = grid.backgroundColor;
-                snake_t *new_tail = tail->prev;
-                free(tail);
-                tail = new_tail;
+                tail = move_tail(tail);
             }
 
             printf("snake %p\t\ttail %p\n", snake, tail);
